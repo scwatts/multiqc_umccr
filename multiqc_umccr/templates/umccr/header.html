@@ -1,0 +1,284 @@
+{# #######################
+  header.html
+##########################
+
+#}
+
+<script>
+
+    // Rename samples
+    // Done through manipulating DOM to apply via MultiQC toolbox
+    $(function() {
+      $('#mqc_renamesamples_from').val('{{ config.umccr.tumor_name }} ({{ config.umccr.tumor_name }})');
+      $('#mqc_renamesamples_to').val('{{ config.umccr.tumor_name }}');
+      $('#mqc_renamesamples_filter_update').trigger('submit');
+
+      $('#mqc_renamesamples_from').val('{{ config.umccr.normal_name }} ({{ config.umccr.tumor_name }})');
+      $('#mqc_renamesamples_to').val('{{ config.umccr.normal_name }}');
+      $('#mqc_renamesamples_filter_update').trigger('submit');
+
+      $('#mqc_renamesamples_from').val('{{ config.umccr.tumor_name }}_normal');
+      $('#mqc_renamesamples_to').val('{{ config.umccr.tumor_name }}_normal [{{ config.umccr.normal_name }}; DRAGEN somatic]');
+      $('#mqc_renamesamples_filter_update').trigger('submit');
+
+      $('#mqc_rename_apply').click();
+    });
+
+
+    // Hide the normal sample data from the DRAGEN somatic run
+    // Done through manipulating DOM to apply via MultiQC toolbox
+    $(function() {
+      $('#mqc_hidesamples_filter').val('{{ config.umccr.tumor_name }}_normal');
+      $('#mqc_hidesamples_form').trigger('submit');
+
+      $('#mqc_hidesamples_filter').val('{{ config.umccr.tumor_name }}_normal [{{ config.umccr.normal_name }}; DRAGEN somatic]');
+      $('#mqc_hidesamples_form').trigger('submit');
+
+      $('#mqc_hide_apply').click();
+
+      // Hide warning alerts text since no one needs to know
+      // NOTE(SW): in order to reliably remove warning alert elements we must wait until all plots
+      // have finished rendering since trying remove at an earlier stage has no effect. There is no
+      // clear event to hook into so I check render status of each plot at 10 ms intervals.
+      function hideSampleWarningAfterRender(coldStart) {
+        if (coldStart == true) {
+          setTimeout(hideSampleWarningAfterRender, 10);
+        } else if ($(".hc-plot.not_rendered:visible:not(.gt_max_num_ds)").length != 0) {
+          setTimeout(hideSampleWarningAfterRender, 10);
+        } else {
+          // Plots rendered, warnings can now be removed
+          $('.samples-hidden-warning').remove();
+        }
+      }
+      hideSampleWarningAfterRender(true);
+    });
+
+
+    // Sample highlighting
+    // NOTE(SW): this seemlingly cannot be done through manipulating DOM to apply via MultiQC
+    // toolbox
+    const red = "rgb(228, 26, 28)";
+    const blue = "rgb(55, 126, 184)"
+    const gray = "rgb(203, 203, 203)"
+
+    const samples_order = [];
+    const samples_hl = new Map();
+
+    const tumor_regex = [
+      // Standard
+      "^{{ config.umccr.tumor_name }}$",
+      // DRAGEN FastQC plots
+      "^{{ config.umccr.tumor_name }}_Read1$",
+      "^{{ config.umccr.tumor_name }}_Read2$",
+    ];
+    const normal_regex = [
+      // Standard
+      "^{{ config.umccr.normal_name }}$",
+      // DRAGEN FastQC plots
+      "^{{ config.umccr.normal_name }}_Read1$",
+      "^{{ config.umccr.normal_name }}_Read2$",
+      // Normal sample from the DRAGEN somatic run
+      "^{{ config.umccr.tumor_name }}_normal \\[{{ config.umccr.normal_name }}; DRAGEN somatic\\]$",
+    ];
+
+    tumor_regex.forEach(d => samples_hl.set(d, red));
+    normal_regex.forEach(d => samples_hl.set(d, blue));
+    samples_order.push(...tumor_regex, ...normal_regex);
+
+    let bg_texts = [];
+    let bg_cols = [];
+
+    {% for ref_sample in config.umccr.reference_samples %}
+    bg_texts.push("^{{ ref_sample }}$");
+    bg_cols.push(gray);
+    bg_texts.push("^{{ ref_sample }}_Read1$");
+    bg_cols.push(gray);
+    bg_texts.push("^{{ ref_sample }}_Read2$");
+    bg_cols.push(gray);
+    samples_order.push("{{ ref_sample }}")
+    {% endfor %}
+
+    window.mqc_highlight_f_texts = Array.from(samples_hl.keys()).concat(bg_texts);
+    window.mqc_highlight_f_cols = Array.from(samples_hl.values()).concat(bg_cols);
+    window.mqc_highlight_regex_mode = true;
+
+    // Apply sample highlight
+    $(function() {
+      $('.mqc_table_sortHighlight').hide();
+      $('.mqc_table tbody th')
+        .removeClass('highlighted')
+        .removeData('highlight')
+        .each(function(i) {
+          var th = $(this);
+          var thtext = $(this).text();
+          var thiscolor = gray;
+          $.each(window.mqc_highlight_f_texts, function(idx, f_text){
+            if (thtext.match(f_text)) {
+              thiscolor = window.mqc_highlight_f_cols[idx];
+            }
+            th.addClass('highlighted').data('highlight', idx);
+            $('.mqc_table_sortHighlight').show();
+            th.css('color', thiscolor);
+        });
+      });
+    });
+
+
+    // Order table rows with order:
+    //   - patient tumor
+    //   - patient normal
+    //   - <reference sample as provided in multiqc_config.yaml>
+    //   - other samples
+    function get_regex_index(s, samples_order) {
+      for (var i = 0; i < samples_order.length; i++) {
+        const re_result = s.search(samples_order[i]);
+        if (re_result > -1) {
+          return i;
+        }
+      }
+      return Infinity;
+    }
+
+    $(function() {
+      $('.mqc_table').not('.mqc_configModal_table').each(function() {
+        var header = $(this).find('thead tr')[0].children
+        var hrows = $(this).find('tbody tr')
+
+        // Determine sample name column index
+        var sample_name_column = -1;
+        for (var i = 0; i < header.length; i++) {
+          if (header[i].innerText === "Sample Name") {
+            sample_name_column = i;
+            break;
+          }
+        }
+        if (sample_name_column === -1) {
+          throw 'Could not find sample name column';
+        }
+
+        // Sort according to predefined list
+        var result = hrows.sort(function(a, b) {
+          const a_name = a.cells[sample_name_column].innerText;
+          const b_name = b.cells[sample_name_column].innerText;
+          return get_regex_index(a_name, samples_order) - get_regex_index(b_name, samples_order);
+        });
+
+        // Apply new ordering
+        $(this).find('tbody').append(result);
+        $(this).data("direction", "desc");
+      });
+    });
+
+
+    // Rerender graphs
+    $(function(){
+      $('.hc-plot:not(.not_rendered)').each(function(){
+        var target = $(this).attr('id');
+        plot_graph(target);
+      });
+    });
+
+</script>
+
+<h1 id="page_title">
+  <div class="pull-right">
+    <a href="github.com/umccr/" target="_blank">
+    <img src="data:image/png;base64,{{ include_file('assets/img/umccr_logo.jpeg', b64=True) }}" title="UMCCR" height="80" class="custom_logo">
+    </a>
+  </div>
+  <a href="http://multiqc.info" target="_blank">
+    <img src="data:image/png;base64,{{ include_file('assets/img/MultiQC_logo.png', b64=True) }}" title="MultiQC" class="multiqc_logo">
+  </a>
+</h1>
+{% if config.title is not none or config.subtitle is not none %}
+<h1>
+  {{ config.title if config.title is not none }}
+  {{ '<br>' if config.title is not none and config.subtitle is not none }}
+  {{ '<small>'+config.subtitle+'</small>' if config.subtitle is not none }}
+</h1>
+{% endif %}
+
+{% if config.intro_text != False %}
+<p class="lead">
+  {{ config.intro_text if config.intro_text is not none else 'A modular tool to aggregate results from bioinformatics analyses across many samples into a single report.' }}
+</p>
+{% endif %}
+
+{% if config.report_comment and config.report_comment | length > 0 %}
+<blockquote class="report_comment">{{ config.report_comment }}</blockquote>
+{% endif %}
+
+{% if config.report_header_info and config.report_header_info | length > 0 %}
+<div class="well">
+  <dl class="dl-horizontal" style="margin-bottom:0;">
+    {% for d in config.report_header_info %}{% for k, v in d.items() %}
+      <dt>{{ k }}</dt><dd>{{ v }}</dd>
+    {% endfor %}{% endfor %}
+  </dl>
+</div>
+{% endif %}
+
+<noscript>
+  <div class="alert alert-danger">
+    <h4>JavaScript Disabled</h4>
+    <p>MultiQC reports use JavaScript for plots and toolbox functions. It looks like
+    you have JavaScript disabled in your web browser. Please note that many of the report
+    functions will not work as intended.</p>
+  </div>
+</noscript>
+
+<div class="alert alert-warning mqc_loading_warning" style="display:none;"><span class="glyphicon glyphicon-time"></span> &nbsp;Loading report..</div>
+
+{% if config.show_analysis_time or config.show_analysis_paths %}
+<div id="analysis_dirs_wrapper">
+  <p>Report
+  {% if config.show_analysis_time %}
+    generated on {{ config.creation_date }}
+  {% endif %}
+  {% if config.show_analysis_paths %}
+    based on data in:
+    {% if config.analysis_dir | length == 1 %}
+      <code class="mqc_analysis_path">{{ config.analysis_dir[0] }}</code></p>
+    {% else %}
+      </p>
+      <ul>
+        {% for d in config.analysis_dir %}
+        <li><code class="mqc_analysis_path">{{ d }}</code></li>
+        {%  endfor %}
+      </ul>
+    {% endif %}
+  {% endif %}
+</div>
+{% endif %}
+
+{% if config.sample_names_rename_buttons | length > 0 %}
+<p id="mqc_sname_switches_txt">Change sample names:
+  <span class="btn-group btn-group-sm" role="group" id="mqc_sname_switches">
+    {% for sn_t in config.sample_names_rename_buttons %}
+      <button type="button" class="btn btn-primary mqc_sname_switches {% if loop.index == 1 %}active{% endif %}" data-index="{{ loop.index - 1 }}">{{ sn_t }}</button>
+    {%- endfor %}
+  </span>
+</p>
+{% endif %}
+
+
+{% if config.show_hide_buttons | length > 0 %}
+<p id="mqc_hide_switches_txt">Show/Hide samples:
+  <span class="btn-group btn-group-sm" role="group" id="mqc_hide_switches">
+    {% for sn_t in config.show_hide_buttons %}
+      <button type="button" class="btn btn-primary mqc_hide_switches {% if loop.index == 1 %}active{% endif %}" data-index="{{ loop.index - 1 }}">{{ sn_t }}</button>
+    {%- endfor %}
+  </span>
+</p>
+{% endif %}
+
+<hr id="mqc_header_hr">
+
+{% if report.num_hc_plots > 0 and report.general_stats_data | length > config.num_datasets_plot_limit %}
+<div id="mqc-warning-many-samples" class="alert alert-warning alert-dismissible hidden-print">
+  <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+  <span class="glyphicon glyphicon-warning-sign" aria-hidden="true"></span>
+  Because this report contains a lot of samples, you may need to click 'Show plot' to see some graphs.
+  <button id="mqc-render-all-plots" class="btn btn-default btn-sm">Render all plots</button>
+</div>
+{% endif %}
