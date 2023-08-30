@@ -67,6 +67,8 @@
     const tumor_regex = [
       // Standard
       "^{{ config.umccr.tumor_name }}$",
+      // DRAGEN mapping metrics with read group
+      "^{{ config.umccr.tumor_name }} (.+)$",
       // DRAGEN FastQC plots
       "^{{ config.umccr.tumor_name }}_Read1$",
       "^{{ config.umccr.tumor_name }}_Read2$",
@@ -74,11 +76,14 @@
     const normal_regex = [
       // Standard
       "^{{ config.umccr.normal_name }}$",
+      // DRAGEN mapping metrics with read group
+      "^{{ config.umccr.normal_name }} (.+)$",
       // DRAGEN FastQC plots
       "^{{ config.umccr.normal_name }}_Read1$",
       "^{{ config.umccr.normal_name }}_Read2$",
-      // Normal sample from the DRAGEN somatic run
+      // Normal sample from the DRAGEN somatic run; DRAGEN mapping metrics with read group
       "^{{ config.umccr.tumor_name }}_normal \\[{{ config.umccr.normal_name }}; DRAGEN somatic\\]$",
+      "^{{ config.umccr.tumor_name }}_normal \\[{{ config.umccr.normal_name }}; DRAGEN somatic\\] (.+)$",
     ];
 
     tumor_regex.forEach(d => samples_hl.set(d, red));
