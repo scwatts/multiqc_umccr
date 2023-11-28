@@ -136,4 +136,4 @@ custom_data:
 
 sp:
     umccr:
-        fn_re: '.*(somatic|germline).variant_counts.yaml'
+        fn_re: '.*(somatic|germline).variant_counts_type.yaml'
