@@ -4,7 +4,7 @@ import setuptools
 
 setuptools.setup(
     name='multiqc_umccr',
-    version='0.0.1',
+    version='0.0.2',
     author='UMCCR and contributors',
     url='https://github.com/scwatts/mulitqc_umccr',
     packages=setuptools.find_packages(),
