@@ -1,6 +1,6 @@
 # UMCCR MultiQC template
 
-A MultiQC template that organises data and adds additional formatting to the base MultiQC report.
+A MultiQC v1.15 template that organises data and adds additional formatting to the base MultiQC report.
 
 This template provides:
 
